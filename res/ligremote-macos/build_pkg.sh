@@ -28,10 +28,12 @@ extrai "$DMG_X64" x86_64
 
 chmod 755 "$AQUI/scripts/preinstall" "$AQUI/scripts/postinstall"
 pkgbuild --analyze --root "$W/root" "$W/comp.plist"
-n=$(/usr/libexec/PlistBuddy -c "Print" "$W/comp.plist" | grep -c "RootRelativeBundlePath" || true)
-for ((i=0; i<n; i++)); do
+i=0
+while /usr/libexec/PlistBuddy -c "Print :$i" "$W/comp.plist" >/dev/null 2>&1; do
   /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$W/comp.plist"
+  i=$((i+1))
 done
+echo "componentes não relocáveis: $i"
 pkgbuild --root "$W/root" --component-plist "$W/comp.plist" --scripts "$AQUI/scripts" \
   --identifier br.com.ligit.LIGRemote.pkg --version "$VER" --install-location / "$W/LIGRemote-comp.pkg"
 
