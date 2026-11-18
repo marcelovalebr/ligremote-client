@@ -1,0 +1,24 @@
+#!/bin/bash
+# LIG Remote - preinstall do .pkg: para e remove uma instalação anterior do LIG Remote.
+# Não mexe em RustDesk de terceiros: só remove plist que aponta para LIGRemote.app.
+exec >>/var/log/ligremote_install.log 2>&1
+echo "== $(date '+%F %T') preinstall"
+
+for dir in /Library/LaunchDaemons /Library/LaunchAgents; do
+  for f in "$dir"/br.com.ligit.LIGRemote_*.plist "$dir"/com.carriez.LIGRemote_*.plist "$dir"/com.carriez.RustDesk_*.plist; do
+    [ -f "$f" ] || continue
+    grep -q "LIGRemote.app" "$f" || continue
+    label=$(/usr/bin/defaults read "$f" Label 2>/dev/null)
+    if [ "$dir" = /Library/LaunchDaemons ]; then
+      /bin/launchctl bootout "system/$label" 2>/dev/null || /bin/launchctl unload -w "$f" 2>/dev/null
+    else
+      for uid in $(/bin/ps -axo uid=,comm= | /usr/bin/awk '/loginwindow/{print $1}' | /usr/bin/sort -u); do
+        /bin/launchctl bootout "gui/$uid/$label" 2>/dev/null
+      done
+    fi
+    /bin/rm -f "$f"
+    echo "removido $f"
+  done
+done
+/usr/bin/pkill -f "/Applications/LIGRemote.app/Contents/MacOS/" 2>/dev/null
+exit 0

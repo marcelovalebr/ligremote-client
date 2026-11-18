@@ -1,0 +1,96 @@
+name: LIG Remote macOS pkg
+
+# Gera o LIGRemote.pkg (arm64 + x86_64) a partir dos .dmg de um release, instala de verdade
+# num runner arm64 e num Intel com uma licença de teste no nome do arquivo e só publica no
+# release se os dois passarem.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: release de origem dos .dmg
+        default: "1.5.3-3"
+  push:
+    branches: [ligremote]
+    paths:
+      - "res/ligremote-macos/**"
+      - ".github/workflows/ligremote-macos-pkg.yml"
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || '1.5.3-3' }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: res/ligremote-macos
+      - name: baixar dmg
+        run: |
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "rustdesk-*-aarch64.dmg" -p "rustdesk-*-x86_64.dmg" -D dmg
+          ls -la dmg
+      - name: gerar pkg
+        run: |
+          VER="${TAG%%-*}"
+          bash res/ligremote-macos/build_pkg.sh dmg/rustdesk-*-aarch64.dmg dmg/rustdesk-*-x86_64.dmg "$VER" LIGRemote.pkg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ligremote-pkg
+          path: LIGRemote.pkg
+
+  testar:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ligremote-pkg
+      - name: instalar com licença de teste no nome
+        run: |
+          CFG=$(python3 -c 'import base64,json,os; d=json.dumps({"host":"teste-pkg.ligit.invalid","key":base64.b64encode(os.urandom(32)).decode(),"relay":"","api":""},separators=(",",":")).encode(); print(base64.urlsafe_b64encode(d).decode().rstrip("=")[::-1])')
+          PKG="LIGRemote-licensed-${CFG}.pkg"
+          mv LIGRemote.pkg "$PKG"
+          sudo installer -pkg "$PKG" -target / -verboseR
+          echo "---- log"; sudo cat /var/log/ligremote_install.log
+      - name: conferir
+        run: |
+          set -x
+          APP=/Applications/LIGRemote.app
+          EXE=$(defaults read "$APP/Contents/Info" CFBundleExecutable)
+          BIN="$APP/Contents/MacOS/$EXE"
+          file "$BIN"
+          codesign --verify --deep --strict "$APP"
+          ls -la /Library/LaunchDaemons/ /Library/LaunchAgents/ | grep -i ligremote
+          sudo launchctl print system/br.com.ligit.LIGRemote_service | head -25
+          pgrep -fl "LIGRemote.app" || true
+          ls -la /tmp/LIGRemote-service/ || true
+          SRV=$(sudo "$BIN" --option custom-rendezvous-server)
+          echo "servidor no app: $SRV"
+          ID=$(sudo "$BIN" --get-id); echo "ID: $ID"
+          sudo cat /var/root/Library/Preferences/br.com.ligit.LIGRemote/LIGRemote2.toml || true
+          cat ~/Library/Preferences/br.com.ligit.LIGRemote/LIGRemote2.toml || true
+          sudo tail -n 30 /var/log/ligremote_service.err || true
+          test "$SRV" = "teste-pkg.ligit.invalid"
+          grep -q "teste-pkg.ligit.invalid" ~/Library/Preferences/br.com.ligit.LIGRemote/LIGRemote2.toml
+      - name: reinstalar por cima (upgrade)
+        run: |
+          sudo installer -pkg LIGRemote-licensed-*.pkg -target /
+          sudo "/Applications/LIGRemote.app/Contents/MacOS/$(defaults read /Applications/LIGRemote.app/Contents/Info CFBundleExecutable)" --option custom-rendezvous-server
+
+  publicar:
+    needs: testar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ligremote-pkg
+      - run: gh release upload "$TAG" LIGRemote.pkg --clobber -R "$GITHUB_REPOSITORY"

@@ -1,0 +1,106 @@
+#!/bin/bash
+# LIG Remote - postinstall do .pkg.
+# 1. Copia o app da arquitetura certa para /Applications/LIGRemote.app.
+# 2. Instala serviço (LaunchDaemon) e agente (LaunchAgent), com os nomes que o app confere
+#    em is_installed_daemon (ORG.APP_NAME = br.com.ligit.LIGRemote).
+# 3. Aplica a licença: o painel entrega o pacote como LIGRemote-licensed-<cfg>.pkg e o nome
+#    do arquivo chega aqui em $1. Mesmo formato do instalador do Windows.
+exec >>/var/log/ligremote_install.log 2>&1
+echo "== $(date '+%F %T') postinstall pacote=$1"
+
+APP=/Applications/LIGRemote.app
+STAGE="/Library/Application Support/LIGRemote/pkg"
+FULL=br.com.ligit.LIGRemote
+DAEMON=/Library/LaunchDaemons/${FULL}_service.plist
+AGENT=/Library/LaunchAgents/${FULL}_server.plist
+
+ARCH=x86_64
+[ "$(/usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] && ARCH=arm64
+if [ ! -d "$STAGE/$ARCH/LIGRemote.app" ]; then
+  echo "ERRO: app $ARCH ausente no pacote"; exit 1
+fi
+/bin/rm -rf "$APP"
+/usr/bin/ditto "$STAGE/$ARCH/LIGRemote.app" "$APP" || { echo "ERRO: ditto"; exit 1; }
+/bin/rm -rf "/Library/Application Support/LIGRemote"
+/usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+EXE=$(/usr/bin/defaults read "$APP/Contents/Info" CFBundleExecutable)
+BIN="$APP/Contents/MacOS/$EXE"
+BID=$(/usr/bin/defaults read "$APP/Contents/Info" CFBundleIdentifier)
+echo "app $ARCH exe=$EXE bundle=$BID"
+
+cat >"$DAEMON" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${FULL}_service</string>
+  <key>AssociatedBundleIdentifiers</key><string>${BID}</string>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>1</integer>
+  <key>ProgramArguments</key><array><string>${APP}/Contents/MacOS/service</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>WorkingDirectory</key><string>${APP}/Contents/MacOS/</string>
+  <key>StandardErrorPath</key><string>/var/log/ligremote_service.err</string>
+  <key>StandardOutPath</key><string>/var/log/ligremote_service.out</string>
+</dict>
+</plist>
+EOF
+
+cat >"$AGENT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${FULL}_server</string>
+  <key>AssociatedBundleIdentifiers</key><string>${BID}</string>
+  <key>LimitLoadToSessionType</key><array><string>LoginWindow</string><string>Aqua</string></array>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/><key>AfterInitialDemand</key><false/></dict>
+  <key>ThrottleInterval</key><integer>1</integer>
+  <key>RunAtLoad</key><true/>
+  <key>ProgramArguments</key><array><string>${BIN}</string><string>--server</string></array>
+  <key>WorkingDirectory</key><string>${APP}/Contents/MacOS/</string>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+EOF
+/usr/sbin/chown root:wheel "$DAEMON" "$AGENT"; /bin/chmod 644 "$DAEMON" "$AGENT"
+
+/bin/launchctl bootout "system/${FULL}_service" 2>/dev/null
+/bin/launchctl bootstrap system "$DAEMON" || /bin/launchctl load -w "$DAEMON"
+
+# espera o socket IPC do serviço (o --config grava por ele)
+for i in $(seq 1 20); do
+  /bin/ls /tmp/LIGRemote-service/ 2>/dev/null | /usr/bin/grep -q ipc && break
+  /bin/sleep 1
+done
+
+echo "PACKAGE_PATH=${PACKAGE_PATH:-}"
+NOME=$(/usr/bin/basename "${PACKAGE_PATH:-${1:-}}" .pkg)
+case "$NOME" in
+  *licensed-*|*host=*)
+    "$BIN" --config "$NOME"
+    /bin/sleep 1
+    echo "licença aplicada: servidor=$("$BIN" --option custom-rendezvous-server 2>/dev/null)"
+    ;;
+  *) echo "pacote sem licença no nome ($NOME): configurar no app" ;;
+esac
+
+# usuário logado: copia a config do root (servidor e chave) e sobe o agente na sessão dele
+USR=$(/usr/bin/stat -f%Su /dev/console)
+if [ -n "$USR" ] && [ "$USR" != root ] && [ "$USR" != loginwindow ]; then
+  UID_=$(/usr/bin/id -u "$USR")
+  HOMEU=$(/usr/bin/dscl . -read "/Users/$USR" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+  SRC="/var/root/Library/Preferences/$FULL/LIGRemote2.toml"
+  DST="$HOMEU/Library/Preferences/$FULL"
+  if [ -f "$SRC" ] && /usr/bin/grep -q custom-rendezvous-server "$SRC"; then
+    /bin/mkdir -p "$DST"
+    /bin/cp -f "$SRC" "$DST/LIGRemote2.toml"
+    /usr/sbin/chown -R "$USR" "$DST"
+  fi
+  /bin/launchctl bootout "gui/$UID_/${FULL}_server" 2>/dev/null
+  /bin/launchctl bootstrap "gui/$UID_" "$AGENT" 2>/dev/null || /bin/launchctl asuser "$UID_" /bin/launchctl load -w "$AGENT"
+  # abre o app para o usuário ver o ID e liberar Gravação de Tela e Acessibilidade
+  /bin/launchctl asuser "$UID_" /usr/bin/open "$APP" 2>/dev/null
+fi
+echo "postinstall ok"
+exit 0
