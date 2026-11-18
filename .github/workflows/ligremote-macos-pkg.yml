@@ -77,6 +77,7 @@ jobs:
           sudo launchctl print system/br.com.ligit.LIGRemote_service | head -25
           pgrep -fl "LIGRemote.app" || true
           ls -la /tmp/LIGRemote-service/ || true
+          sleep 5
           SRV=$(sudo "$BIN" --option custom-rendezvous-server)
           echo "servidor no app: $SRV"
           ID=$(sudo "$BIN" --get-id); echo "ID: $ID"
@@ -88,7 +89,10 @@ jobs:
       - name: reinstalar por cima (upgrade)
         run: |
           sudo installer -pkg LIGRemote-licensed-*.pkg -target /
-          sudo "/Applications/LIGRemote.app/Contents/MacOS/$(defaults read /Applications/LIGRemote.app/Contents/Info CFBundleExecutable)" --option custom-rendezvous-server
+          sleep 5
+          S=$(sudo "/Applications/LIGRemote.app/Contents/MacOS/$(defaults read /Applications/LIGRemote.app/Contents/Info CFBundleExecutable)" --option custom-rendezvous-server)
+          echo "depois do upgrade: $S"; sudo tail -n 15 /var/log/ligremote_install.log
+          test "$S" = "teste-pkg.ligit.invalid"
 
   publicar:
     needs: testar

@@ -78,9 +78,11 @@ echo "PACKAGE_PATH=${PACKAGE_PATH:-}"
 NOME=$(/usr/bin/basename "${PACKAGE_PATH:-${1:-}}" .pkg)
 case "$NOME" in
   *licensed-*|*host=*)
-    "$BIN" --config "$NOME"
+    # o installer herda o HOME de quem rodou; sem fixar, o root grava a config na pasta do usuário
+    # como root:600 e o --server do usuário sobe sem servidor
+    HOME=/var/root "$BIN" --config "$NOME"
     /bin/sleep 1
-    echo "licença aplicada: servidor=$("$BIN" --option custom-rendezvous-server 2>/dev/null)"
+    echo "licença aplicada: servidor=$(HOME=/var/root "$BIN" --option custom-rendezvous-server 2>/dev/null)"
     ;;
   *) echo "pacote sem licença no nome ($NOME): configurar no app" ;;
 esac
@@ -92,11 +94,17 @@ if [ -n "$USR" ] && [ "$USR" != root ] && [ "$USR" != loginwindow ]; then
   HOMEU=$(/usr/bin/dscl . -read "/Users/$USR" NFSHomeDirectory | /usr/bin/awk '{print $2}')
   SRC="/var/root/Library/Preferences/$FULL/LIGRemote2.toml"
   DST="$HOMEU/Library/Preferences/$FULL"
+  /bin/mkdir -p "$DST"
   if [ -f "$SRC" ] && /usr/bin/grep -q custom-rendezvous-server "$SRC"; then
-    /bin/mkdir -p "$DST"
     /bin/cp -f "$SRC" "$DST/LIGRemote2.toml"
-    /usr/sbin/chown -R "$USR" "$DST"
+    echo "config copiada para $DST"
+  else
+    echo "AVISO: $SRC sem servidor"
   fi
+  # qualquer arquivo que um processo root tenha criado aqui volta para o usuário
+  /usr/sbin/chown -R "$USR" "$DST"
+  /bin/chmod 700 "$DST"
+  /bin/ls -la "$DST"
   /bin/launchctl bootout "gui/$UID_/${FULL}_server" 2>/dev/null
   /bin/launchctl bootstrap "gui/$UID_" "$AGENT" 2>/dev/null || /bin/launchctl asuser "$UID_" /bin/launchctl load -w "$AGENT"
   # abre o app para o usuário ver o ID e liberar Gravação de Tela e Acessibilidade
