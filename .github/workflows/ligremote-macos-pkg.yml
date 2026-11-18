@@ -25,7 +25,8 @@ env:
 
 jobs:
   build:
-    runs-on: macos-15
+    # macos-15 (arm64) vive sem capacidade no GitHub; o Intel monta o pacote universal igual
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,8 +49,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel]
+        os: [macos-15-intel, macos-15]
     runs-on: ${{ matrix.os }}
+    # arm64 é informativo (fila do GitHub): não segura a publicação
+    continue-on-error: ${{ matrix.os == 'macos-15' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -88,6 +92,7 @@ jobs:
 
   publicar:
     needs: testar
+    if: ${{ !cancelled() && needs.testar.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
