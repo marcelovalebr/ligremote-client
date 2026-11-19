@@ -28,6 +28,17 @@ BIN="$APP/Contents/MacOS/$EXE"
 BID=$(/usr/bin/defaults read "$APP/Contents/Info" CFBundleIdentifier)
 echo "app $ARCH exe=$EXE bundle=$BID"
 
+# Pacote só Intel (quando o build arm64 não sai no GitHub): no Apple Silicon o app roda pelo
+# Rosetta. O serviço sobe sem tela, então o Rosetta tem que estar instalado antes dele.
+if [ "$ARCH" = arm64 ] && ! /usr/bin/lipo -archs "$BIN" 2>/dev/null | /usr/bin/grep -qw arm64; then
+  if /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null; then
+    echo "app só x86_64, Rosetta já presente"
+  else
+    echo "app só x86_64, instalando Rosetta"
+    /usr/sbin/softwareupdate --install-rosetta --agree-to-license || echo "AVISO: Rosetta não instalou"
+  fi
+fi
+
 cat >"$DAEMON" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

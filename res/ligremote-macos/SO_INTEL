@@ -1,0 +1,2 @@
+Pacote macOS só com o app Intel (Apple Silicon pelo Rosetta) enquanto o build arm64 não sai no GitHub.
+Apagar este arquivo quando houver .dmg aarch64 novo no release.

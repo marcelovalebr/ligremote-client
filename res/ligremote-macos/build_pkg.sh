@@ -4,6 +4,12 @@
 set -euo pipefail
 DMG_ARM="$1"; DMG_X64="$2"; VER="$3"; OUT="$4"
 AQUI="$(cd "$(dirname "$0")" && pwd)"
+# Com o arquivo SO_INTEL ao lado deste script, o pacote leva o app Intel também na pasta arm64
+# (Apple Silicon roda pelo Rosetta, que o postinstall instala). Uso: quando o build arm64 não sai.
+if [ -f "$AQUI/SO_INTEL" ]; then
+  echo "SO_INTEL: app x86_64 nas duas arquiteturas"
+  DMG_ARM="$DMG_X64"
+fi
 W="$(mktemp -d)"
 ROOT="$W/root/Library/Application Support/LIGRemote/pkg"
 
