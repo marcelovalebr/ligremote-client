@@ -82,7 +82,7 @@ class LigRemoteLicencaCard extends StatelessWidget {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
               Text(
-                  'Entre com o e-mail e a senha que você recebeu da LIG Remote. '
+                  'Entre com seu e-mail e a senha que você criou pelo convite. '
                   'Para só receber acesso, não precisa entrar.',
                   style: TextStyle(fontSize: 12, color: fraco)),
               const SizedBox(height: 8),
