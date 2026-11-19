@@ -468,7 +468,13 @@ impl Client {
 
         let other_server = interface.get_lch().read().unwrap().other_server.clone();
         let (peer, other_server, key, token) = if let Some((a, b, c)) = other_server.as_ref() {
-            (a.as_ref(), b.as_ref(), c.as_ref(), "")
+            let host = |s: &str| {
+                let s = s.trim().to_lowercase();
+                match s.rfind(':') { Some(i) => s[..i].to_owned(), None => s }
+            };
+            let own = crate::get_rendezvous_server(1_000).await.0;
+            let token = if !own.is_empty() && host(b.as_str()) == host(own.as_str()) { token } else { "" };
+            (a.as_ref(), b.as_ref(), c.as_ref(), token)
         } else {
             (peer, "", key, token)
         };
