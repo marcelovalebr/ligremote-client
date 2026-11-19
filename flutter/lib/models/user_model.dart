@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 
 import '../common.dart';
 import '../utils/http_service.dart' as http;
+import '../common/widgets/ligremote_licenca.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -98,6 +99,7 @@ class UserModel {
 
       final user = UserPayload.fromJson(data);
       _parseAndUpdateUser(user);
+      ligremoteInfo.atualiza(data);
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
       // Surface failures in the address book / group tabs, which offer a
@@ -145,6 +147,7 @@ class UserModel {
     userName.value = '';
     displayName.value = '';
     avatar.value = '';
+    ligremoteInfo.limpa();
   }
 
   _parseAndUpdateUser(UserPayload user) {
@@ -229,6 +232,7 @@ class UserModel {
         loginResponse.access_token != null;
     if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
+      ligremoteInfo.atualiza(body);
     }
 
     return loginResponse;
