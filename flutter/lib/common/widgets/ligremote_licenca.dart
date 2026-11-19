@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
+import 'login.dart';
 
 const _kChaveLocal = 'ligremote_info';
 
@@ -62,11 +63,45 @@ class LigRemoteLicencaCard extends StatelessWidget {
     ligremoteInfo.carregaLocal();
     return Obx(() {
       final d = ligremoteInfo.dados;
-      if (d.isEmpty || gFFI.userModel.userName.value.isEmpty) {
-        return const SizedBox.shrink();
-      }
       final theme = Theme.of(context);
       final fraco = theme.textTheme.bodySmall?.color?.withOpacity(0.7);
+      if (gFFI.userModel.userName.value.isEmpty) {
+        // ADR 0050 F3: sem login a conexão de saída é recusada no servidor, então o "Entrar"
+        // fica à vista. Quem só recebe acesso não precisa entrar, e o texto deixa isso claro.
+        return Container(
+          margin: const EdgeInsets.only(left: 20, right: 11, top: 14),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: MyTheme.accent.withOpacity(0.35)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Vai acessar outros computadores?',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(
+                  'Entre com o e-mail e a senha que você recebeu da LIG Remote. '
+                  'Para só receber acesso, não precisa entrar.',
+                  style: TextStyle(fontSize: 12, color: fraco)),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () => loginDialog(),
+                icon: const Icon(Icons.login, size: 16),
+                label: const Text('Entrar', style: TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  minimumSize: const Size(0, 32),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      if (d.isEmpty) {
+        return const SizedBox.shrink();
+      }
       final cliente = (d['cliente'] ?? '').toString();
       final plano = (d['plano'] ?? '').toString();
       final ciclo = (d['ciclo'] ?? '').toString();
