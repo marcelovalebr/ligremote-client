@@ -2624,6 +2624,19 @@ connect(BuildContext context, String id,
     } catch (_) {}
   }
   id = id.replaceAll(' ', '');
+  if (!id.contains('@')) {
+    try {
+      final peers = gFFI.abModel.currentAbPeers;
+      if (!peers.any((p) => p.id == id)) {
+        for (final p in peers) {
+          if (p.id.startsWith('$id@')) {
+            id = p.id;
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+  }
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
   forceRelay = id != oldId || forceRelay;
